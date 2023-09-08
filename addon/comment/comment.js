@@ -54,6 +54,17 @@
     return mode.useInnerComments === false || !mode.innerMode ? mode : cm.getModeAt(pos)
   }
 
+  function getIndent(cm, from, end) {
+    var res;
+    if (end === from) end++;
+    for (var i = from; i < end; ++i) {
+      var indent = cm.getLine(i).search(nonWS);
+      if (!indent) break;
+      if (indent > 0 && (res == null || indent < res)) res = indent;
+    }
+    return res || 0;
+  }
+
   CodeMirror.defineExtension("lineComment", function(from, to, options) {
     if (!options) options = noOptions;
     var self = this, mode = getMode(self, from);
@@ -75,19 +86,11 @@
 
     self.operation(function() {
       if (options.indent) {
-        var baseString = null;
+        var indent = getIndent(self, from.line, end);
         for (var i = from.line; i < end; ++i) {
           var line = self.getLine(i);
-          var whitespace = line.search(nonWS) === -1 ? line : line.slice(0, firstNonWS(line));
-          if (baseString == null || baseString.length > whitespace.length) {
-            baseString = whitespace;
-          }
-        }
-        for (var i = from.line; i < end; ++i) {
-          var line = self.getLine(i), cut = baseString.length;
           if (!blankLines && !nonWS.test(line)) continue;
-          if (line.slice(0, cut) != baseString) cut = firstNonWS(line);
-          self.replaceRange(baseString + commentString + pad, Pos(i, 0), Pos(i, cut));
+          self.replaceRange(commentString + pad, Pos(i, indent));
         }
       } else {
         for (var i = from.line; i < end; ++i) {
@@ -118,13 +121,15 @@
 
     self.operation(function() {
       if (options.fullLines != false) {
+        var indent = options.indent ? getIndent(self, from.line, end) : 0;
         var lastLineHasText = nonWS.test(self.getLine(end));
+        if (!lastLineHasText && end > from.line) end--;
         self.replaceRange(pad + endString, Pos(end));
-        self.replaceRange(startString + pad, Pos(from.line, 0));
+        self.replaceRange(startString + pad, Pos(from.line, indent));
         var lead = options.blockCommentLead || mode.blockCommentLead;
         if (lead != null) for (var i = from.line + 1; i <= end; ++i)
           if (i != end || lastLineHasText)
-            self.replaceRange(lead + pad, Pos(i, 0));
+            self.replaceRange(lead + pad, Pos(i, indent));
       } else {
         var atCursor = cmp(self.getCursor("to"), to) == 0, empty = !self.somethingSelected()
         self.replaceRange(endString, to);
